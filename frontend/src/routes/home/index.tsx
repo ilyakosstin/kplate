@@ -18,10 +18,16 @@ export const Route = createFileRoute("/home/")({
 
 function SellerItem({ item }) {
     return (
-        <div className="shadow-sm p-2 grid grid-cols-[1fr_auto] grid-rows-[auto_1fr] rounded-sm">
-            <p className="col-span-2 font-bold text-lg">{item.name}</p>
+        <div className="shadow-sm p-2 grid grid-cols-[1fr_auto] grid-rows-2 rounded-sm">
+            <p className="font-bold text-xl">{item.name}</p>
+            <p className="justify-self-end">
+                {item.amount > 0 ? item.amount + "шт." : "Нет в наличии"}
+            </p>
             <p>{item.description}</p>
-            <p className="row-span-2">{item.amount}шт.</p>
+            <p className="justify-self-end">
+                <s className="mr-1">{item.price_orig}₽</s>
+                {item.price_disc}₽
+            </p>
         </div>
     );
 }
@@ -109,12 +115,15 @@ function RouteComponent() {
             >
                 <DrawerContent>
                     <DrawerHeader>
-                        <DrawerTitle>{observedSeller.name}</DrawerTitle>
+                        <DrawerTitle>
+                            <h1 className="text-2xl">{observedSeller.name}</h1>
+                        </DrawerTitle>
+                        <p>{observedSeller.address}</p>
                     </DrawerHeader>
 
                     <ul className="w-full flex flex-col gap-1">
                         {observedSeller.items.map((item) => (
-                            <li key={item.id} className="w-full p-1">
+                            <li key={item.id} className="w-full py-1 px-2">
                                 <SellerItem item={item} />
                             </li>
                         ))}
@@ -130,7 +139,7 @@ function RouteComponent() {
                     </DrawerFooter>
                 </DrawerContent>
             </Drawer>
-            <div id="map" style={{ width: 600, height: 400 }}></div>
+            <div id="map" style={{ width: "100%", height: "100%" }}></div>
         </>
     );
 }

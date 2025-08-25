@@ -24,12 +24,7 @@ customerRouter.get("/sellers", async (req, res) => {
         itemsResult.rows.forEach((item) => {
             if (sellers[item.owner_id] === undefined) return;
 
-            sellers[item.owner_id].items.push({
-                id: item.id,
-                name: item.name,
-                description: item.description,
-                amount: item.amount,
-            });
+            sellers[item.owner_id].items.push(item);
         });
 
         res.send({

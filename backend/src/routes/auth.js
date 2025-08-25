@@ -92,10 +92,34 @@ authRouter.get("/logout", (req, res) => {
     });
 });
 
-authRouter.get("/me", (req, res) => {
-    res.send({
-        userId: req.session.userId ?? null,
-    });
+authRouter.get("/me", async (req, res) => {
+    try {
+        if (req.session.userId === undefined) {
+            return res.send({
+                user: null,
+            });
+        }
+
+        const result = await pool.query(
+            "SELECT name, email, is_business FROM users WHERE id=$1",
+            [req.session.userId]
+        );
+
+        if (result.rowCount == 0) {
+            return res.send({
+                user: null,
+            });
+        }
+
+        res.send({
+            user: result.rows[0],
+        });
+    } catch (e) {
+        res.send({
+            user: null,
+            error: true,
+        });
+    }
 });
 
 module.exports = authRouter;

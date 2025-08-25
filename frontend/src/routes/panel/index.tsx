@@ -16,12 +16,85 @@ import InputWrapper from "@/components/form/inputWrapper";
 import { z } from "zod";
 import { FormProvider, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import axiosInstance from "@/lib/axiosInstance";
 
 export const Route = createFileRoute("/panel/")({
     component: RouteComponent,
 });
 
-function Item({
+const itemSchema = z.object({
+    name: z.string().min(3).max(100),
+    description: z.string().min(0).max(100),
+    amount: z.int().min(0).max(100),
+    price_orig: z.int().min(0),
+    price_disc: z.int().min(0),
+});
+
+const defaultItem = {
+    name: "Новый товар",
+    description: "Описание",
+    amount: 1,
+};
+
+enum DialogMode {
+    EDIT,
+    CREATE,
+    NONE,
+}
+
+function ItemPropertiesForm({ item, onSave, children }) {
+    const methods = useForm({
+        resolver: zodResolver(itemSchema),
+        defaultValues: item,
+    });
+    const { register, handleSubmit } = methods;
+
+    const onSubmit = (data) => {
+        onSave(data);
+    };
+
+    return (
+        <FormProvider {...methods}>
+            <form
+                onSubmit={handleSubmit(onSubmit)}
+                className="flex flex-col gap-1"
+            >
+                <InputWrapper title="Имя товара" name="name">
+                    <Input {...register("name")} type="text" />
+                </InputWrapper>
+                <InputWrapper title="Описание" name="description">
+                    <Input {...register("description")} type="text" />
+                </InputWrapper>
+
+                <InputWrapper title="Цена без скидки" name="price_orig">
+                    <Input
+                        {...register("price_orig", { setValueAs: parseInt })}
+                        type="number"
+                    />
+                </InputWrapper>
+                <InputWrapper title="Цена со скидкой" name="price_disc">
+                    <Input
+                        {...register("price_disc", { setValueAs: parseInt })}
+                        type="number"
+                    />
+                </InputWrapper>
+
+                <InputWrapper title="В наличии" name="amount">
+                    <Input
+                        {...register("amount", {
+                            setValueAs: parseInt,
+                        })}
+                        type="number"
+                    />
+                </InputWrapper>
+                {children}
+            </form>
+        </FormProvider>
+    );
+}
+
+function ItemSummary({
     name,
     description,
     amount,
@@ -30,7 +103,7 @@ function Item({
     onEdit,
 }) {
     return (
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-1 shadow-sm py-1 px-2 rounded-sm">
             <div className="w-full flex flex-col">
                 <p className="text-xl font-bold mb-0">{name}</p>
                 <p className="text-sm">{description}</p>
@@ -38,7 +111,7 @@ function Item({
             <Button onClick={onDecreaseAmount} disabled={amount === 0}>
                 <Minus />
             </Button>
-            <span className="mx-1 text-lg">{amount}</span>
+            <span className="mx-1 text-lg w-[2em] text-center">{amount}</span>
             <Button onClick={onIncreaseAmount}>
                 <Plus />
             </Button>
@@ -49,136 +122,229 @@ function Item({
     );
 }
 
-const itemSchema = z.object({
-    name: z.string().min(3).max(100),
-    description: z.string().min(0).max(100),
-    amount: z.int().min(0).max(100),
-});
-
-function EditItemForm({ item, onSave, onDelete }) {
-    const methods = useForm({
-        resolver: zodResolver(itemSchema),
-        defaultValues: {
-            name: item?.name,
-            description: item?.description,
-            amount: item?.amount,
-        },
-    });
-    const { register, handleSubmit } = methods;
-
-    const onSubmit = (data) => {
-        onSave(data);
-    };
-
+function ItemList({ items, onIncrement, onDecrement, onEdit }) {
     return (
-        <FormProvider {...methods}>
-            <form onSubmit={handleSubmit(onSubmit)}>
-                <InputWrapper title="Имя товара" name="name">
-                    <Input {...register("name")} type="text" />
-                </InputWrapper>
-                <InputWrapper title="Описание" name="description">
-                    <Input {...register("description")} type="text" />
-                </InputWrapper>
-                <InputWrapper title="В наличии" name="amount">
-                    <Input
-                        {...register("amount", {
-                            setValueAs: parseInt,
-                        })}
-                        type="number"
-                    />
-                </InputWrapper>
-                <div className="flex gap-2 mt-3">
-                    <Button variant="outline" type="submit">
-                        Сохранить
-                    </Button>
-                    <Button variant="destructive" onClick={onDelete}>
-                        Удалить
-                    </Button>
-                </div>
-            </form>
-        </FormProvider>
+        <>
+            <ul className="w-[500px] flex flex-col gap-1">
+                {items.map((item, i) => (
+                    <li key={i}>
+                        <ItemSummary
+                            {...item}
+                            onIncreaseAmount={() => onIncrement(i)}
+                            onDecreaseAmount={() => onDecrement(i)}
+                            onEdit={() => onEdit(i)}
+                        />
+                    </li>
+                ))}
+            </ul>
+            {items.length == 0 && <p>No items to show...</p>}
+        </>
     );
 }
 
+function CreateItemDialog({ open, defaultValues, onCreate, onCancel }) {
+    return (
+        <Dialog
+            open={open}
+            onOpenChange={(open) => {
+                if (!open) onCancel();
+            }}
+        >
+            <DialogContent>
+                <DialogHeader>
+                    <DialogTitle>Создать новый товар</DialogTitle>
+                </DialogHeader>
+                <ItemPropertiesForm item={defaultValues} onSave={onCreate}>
+                    <div className="flex gap-2 mt-3">
+                        <Button variant="outline" type="submit">
+                            Создать
+                        </Button>
+                        <Button
+                            variant="destructive"
+                            type="button"
+                            onClick={onCancel}
+                        >
+                            Отмена
+                        </Button>
+                    </div>
+                </ItemPropertiesForm>
+            </DialogContent>
+        </Dialog>
+    );
+}
+
+function EditItemDialog({ open, currentItem, onSave, onDelete, onCancel }) {
+    return (
+        <Dialog
+            open={open}
+            onOpenChange={(open) => {
+                if (!open) onCancel();
+            }}
+        >
+            <DialogContent>
+                <DialogHeader>
+                    <DialogTitle>Редактировать товар</DialogTitle>
+                </DialogHeader>
+                <ItemPropertiesForm item={currentItem} onSave={onSave}>
+                    <div className="flex gap-2 mt-3">
+                        <Button variant="outline" type="submit">
+                            Сохранить
+                        </Button>
+                        <Button variant="destructive" onClick={onDelete}>
+                            Удалить
+                        </Button>
+                    </div>
+                </ItemPropertiesForm>
+            </DialogContent>
+        </Dialog>
+    );
+}
+
+enum ItemMutationType {
+    EDIT,
+    CREATE,
+    DELETE,
+}
+
 function RouteComponent() {
-    const [items, setItems] = useState([
-        { name: "Круассан1", description: "---", amount: 1 },
-        { name: "Круассан2", description: "---", amount: 2 },
-        { name: "Круассан3", description: "---", amount: 3 },
-    ]);
-    const [editId, setEditId] = useState(-1);
+    const {
+        data: itemsData,
+        isLoading: areItemsLoading,
+        isSuccess: areItemsSuccessfullyLoaded,
+        refetch: refetchItems,
+    } = useQuery({
+        queryKey: ["mine_items"],
+        queryFn: () => axiosInstance.get("/business/items/mine"),
+    });
 
-    console.log("A", items);
+    console.log(itemsData);
 
-    const editItem = (i) => {
-        setEditId(i);
-    };
+    const { mutate: mutateItem, isPending: isItemMutationPending } =
+        useMutation({
+            mutationKey: ["mutate_item"],
+            mutationFn: (payload) => {
+                console.log(payload);
+                if (payload.type == ItemMutationType.DELETE)
+                    return axiosInstance.post("/business/items/delete", {
+                        id: payload.id,
+                    });
+                else if (payload.type == ItemMutationType.CREATE)
+                    return axiosInstance.post(
+                        "/business/items/create",
+                        payload.item
+                    );
+                else if (payload.type == ItemMutationType.EDIT)
+                    return axiosInstance.post(
+                        "/business/items/edit",
+                        payload.item
+                    );
+                throw "unknown mutation type";
+            },
+            onSuccess: () => {
+                refetchItems();
+            },
+            onError: () => {},
+            onSettled: (data) => {
+                console.log(data);
+            },
+        });
 
-    const updateItem = (i, newItem) => {
-        setItems([...items.slice(0, i), newItem, ...items.slice(i + 1)]);
-    };
+    const [dialogMode, setDialogMode] = useState(DialogMode.NONE);
+    const [dialogTargets, setDialogTargets] = useState({
+        edit: 0,
+        create: defaultItem,
+    });
 
-    const deleteItem = (i) => {
-        setItems([...items.slice(0, i), ...items.slice(i + 1)]);
-    };
-
-    const addNewItem = () => {
-        setItems([
-            ...items,
-            { name: "Новый товар", description: "Описание", amount: 0 },
-        ]);
-        editItem(items.length);
-    };
+    const getItem = (i) => (itemsData?.data?.items ?? [])[i];
 
     return (
         <>
             <div>
-                <ul className="w-[400px] bg-gray-400">
-                    {items.map((item, i) => (
-                        <li key={i}>
-                            <Item
-                                {...item}
-                                onIncreaseAmount={() =>
-                                    updateItem(i, {
-                                        ...item,
-                                        amount: item.amount + 1,
+                <h1 className="text-2xl">Товары</h1>
+                <div className="mt-2">
+                    {areItemsLoading && <p>Загрузка товаров...</p>}
+                    {!areItemsLoading && !areItemsSuccessfullyLoaded && (
+                        <p>Items failed to load</p>
+                    )}
+                    {areItemsSuccessfullyLoaded && (
+                        <>
+                            <ItemList
+                                items={itemsData?.data?.items}
+                                onIncrement={(i) =>
+                                    mutateItem({
+                                        type: ItemMutationType.EDIT,
+                                        item: {
+                                            ...getItem(i),
+                                            amount: getItem(i).amount + 1,
+                                        },
                                     })
                                 }
-                                onDecreaseAmount={() =>
-                                    updateItem(i, {
-                                        ...item,
-                                        amount: item.amount - 1,
+                                onDecrement={(i) =>
+                                    mutateItem({
+                                        type: ItemMutationType.EDIT,
+                                        item: {
+                                            ...getItem(i),
+                                            amount: getItem(i).amount - 1,
+                                        },
                                     })
                                 }
-                                onEdit={() => editItem(i)}
+                                onEdit={(i) => {
+                                    setDialogTargets({
+                                        ...dialogTargets,
+                                        edit: i,
+                                    });
+                                    setDialogMode(DialogMode.EDIT);
+                                }}
                             />
-                        </li>
-                    ))}
-                </ul>
-
-                <Button onClick={addNewItem}>Add new</Button>
+                            <Button
+                                onClick={() => {
+                                    setDialogTargets({
+                                        ...dialogTargets,
+                                        create: defaultItem,
+                                    });
+                                    setDialogMode(DialogMode.CREATE);
+                                }}
+                                className="mt-3"
+                            >
+                                Добавить товар
+                            </Button>
+                        </>
+                    )}
+                </div>
             </div>
 
-            <Dialog open={editId !== -1}>
-                <DialogContent>
-                    <DialogHeader>
-                        <DialogTitle>Изменить товар</DialogTitle>
-                    </DialogHeader>
-                    {editId > -1 && (
-                        <EditItemForm
-                            onDelete={() => {
-                                deleteItem(editId);
-                                setEditId(-1);
-                            }}
-                            onSave={(newItem) => {
-                                updateItem(editId, newItem);
-                                setEditId(-1);
-                            }}
-                            item={items[editId]}
-                        />
-                    )}
-                </DialogContent>
-            </Dialog>
+            <CreateItemDialog
+                open={dialogMode == DialogMode.CREATE}
+                defaultValues={dialogTargets.create}
+                onCancel={() => {
+                    setDialogMode(DialogMode.NONE);
+                }}
+                onCreate={(data) => {
+                    setDialogMode(DialogMode.NONE);
+                    mutateItem({ type: ItemMutationType.CREATE, item: data });
+                }}
+            />
+            <EditItemDialog
+                open={dialogMode == DialogMode.EDIT}
+                currentItem={getItem(dialogTargets.edit) ?? defaultItem}
+                onDelete={() => {
+                    setDialogMode(DialogMode.NONE);
+                    mutateItem({
+                        type: ItemMutationType.DELETE,
+                        id: getItem(dialogTargets.edit).id,
+                    });
+                }}
+                onSave={(data) => {
+                    setDialogMode(DialogMode.NONE);
+                    mutateItem({
+                        type: ItemMutationType.EDIT,
+                        item: { ...data, id: getItem(dialogTargets.edit).id },
+                    });
+                }}
+                onCancel={() => {
+                    setDialogMode(DialogMode.NONE);
+                }}
+            />
         </>
     );
 }

@@ -12,7 +12,12 @@ const businessRouter = require("./routes/business");
 const customerRouter = require("./routes/customer");
 const { businessOnly } = require("./lib/auth");
 
-app.use(cors());
+app.use(
+    cors({
+        origin: "http://localhost:3000",
+        credentials: true,
+    })
+);
 app.use(express.json());
 app.use(
     cookieSession({

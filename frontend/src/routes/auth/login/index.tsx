@@ -6,13 +6,14 @@ import { Input } from "@/components/ui/input";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { loginSchema } from "@/lib/schema";
 import axiosInstance from "@/lib/axiosInstance";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 
 export const Route = createFileRoute("/auth/login/")({
     component: RouteComponent,
 });
 
 function RouteComponent() {
+    const queryClient = useQueryClient();
     const navigate = useNavigate();
     const methods = useForm({
         resolver: zodResolver(loginSchema),
@@ -25,6 +26,7 @@ function RouteComponent() {
             console.log(res);
             if (res.data.success == true) {
                 navigate({ to: "/home" });
+                queryClient.invalidateQueries(["auth"]);
             } else {
                 alert("failed to log in");
             }

@@ -2,7 +2,7 @@ const pool = require("./db");
 
 function authOnly(req, res, next) {
     if (req.session.userId === undefined) {
-        res.send({
+        res.status(403).send({
             error: "NOT_AUTHENTICATED",
         });
         return;
@@ -12,7 +12,7 @@ function authOnly(req, res, next) {
 
 async function businessOnly(req, res, next) {
     if (req.session.userId === undefined) {
-        res.send({
+        res.status(403).send({
             error: "NOT_AUTHENTICATED",
         });
         return;
@@ -25,12 +25,12 @@ async function businessOnly(req, res, next) {
 
     if (result.rowCount == 0) {
         req.session.userId === undefined;
-        res.send({
+        res.status(403).send({
             error: "NOT_AUTHENTICATED",
         });
         return;
     } else if (!result.rows[0].is_business) {
-        res.send({
+        res.status(403).send({
             error: "NOT_AUTHORIZED",
         });
         return;
